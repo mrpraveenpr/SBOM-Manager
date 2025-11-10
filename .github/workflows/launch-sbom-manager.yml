@@ -15,10 +15,12 @@ jobs:
 
     steps:
       # -----------------------------------------------------------
-      # 1️⃣ Checkout repo
+      # 1️⃣ Checkout repo (disable default credentials)
       # -----------------------------------------------------------
       - name: 🧩 Checkout SBOM Manager Repo
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false  # ✅ prevent checkout from using GITHUB_TOKEN
 
       # -----------------------------------------------------------
       # 2️⃣ Install CycloneDX CLI & FOSSA CLI
@@ -38,7 +40,7 @@ jobs:
           echo "✅ FOSSA version: $(fossa --version)"
 
       # -----------------------------------------------------------
-      # 3️⃣ Collect all latest SBOMs from all projects & merge
+      # 3️⃣ Collect and merge latest SBOMs
       # -----------------------------------------------------------
       - name: 🔁 Merge all latest SBOMs into a single file
         run: |
@@ -46,37 +48,43 @@ jobs:
           BASE_DIR="sboms"
           MERGED_FILE="$BASE_DIR/complete-merged-sbom.cdx.json"
           TEMP_LIST="/tmp/sbom-list.txt"
-
-          echo "🔍 Collecting all latest SBOMs (excluding old/ and merged files)..."
+          echo "🔍 Collecting all latest SBOMs..."
           rm -f "$TEMP_LIST"
           find "$BASE_DIR" -type f -name "*.cdx.json" \
             ! -path "*/old/*" \
             ! -name "merged-sbom.cdx.json" \
             ! -name "complete-merged-sbom.cdx.json" > "$TEMP_LIST"
-
           if [ ! -s "$TEMP_LIST" ]; then
             echo "⚠️ No SBOMs found to merge."
             exit 0
           fi
-
-          echo "🧩 Merging $(wc -l < $TEMP_LIST) SBOM(s) into a single complete SBOM..."
+          echo "🧩 Merging $(wc -l < $TEMP_LIST) SBOM(s)..."
           cyclonedx merge --input-files $(cat "$TEMP_LIST") --output-file "$MERGED_FILE"
           echo "✅ Created unified SBOM → $MERGED_FILE"
 
       # -----------------------------------------------------------
-      # 4️⃣ Commit and Push merged SBOM
+      # 4️⃣ Commit and Push merged SBOM (FIXED)
       # -----------------------------------------------------------
       - name: 💾 Commit and Push merged SBOM
+        env:
+          PUSH_TOKEN: ${{ secrets.SBOM_PUSH_TOKEN }}
         run: |
+          set -e
+
+          echo "💾 Configuring Git..."
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
 
+          echo "📦 Preparing commit..."
           git add sboms/complete-merged-sbom.cdx.json
-          git commit -m "🧩 Complete merged SBOM generated - $(date -u '+%Y-%m-%d %H:%M:%S')" || echo "ℹ️ No changes to commit"
+          git commit -m "🧩 Complete merged SBOM generated - $(date -u '+%Y-%m-%d %H:%M:%S')" || echo "ℹ️ No new changes to commit"
 
-          # ✅ Authenticate using your personal access token
-          git remote set-url origin https://x-access-token:${{ secrets.SBOM_PUSH_TOKEN }}@github.com/mrpraveenpr/SBOM-Manager.git
-          git push origin main
+          echo "🔐 Reconfiguring authenticated remote..."
+          git remote remove origin
+          git remote add origin https://x-access-token:${PUSH_TOKEN}@github.com/mrpraveenpr/SBOM-Manager.git
+
+          echo "🚀 Pushing changes to main branch..."
+          git push origin main || (echo "❌ Push failed"; exit 1)
 
           echo "✅ Complete merged SBOM committed & pushed successfully."
 
@@ -88,7 +96,6 @@ jobs:
         run: |
           set -euo pipefail
           MERGED_FILE="sboms/complete-merged-sbom.cdx.json"
-
           if [ -f "$MERGED_FILE" ]; then
             echo "🚀 Uploading unified SBOM to FOSSA project: ${FOSSA_PROJECT_NAME}..."
             fossa sbom analyze \
@@ -102,7 +109,7 @@ jobs:
           fi
 
       # -----------------------------------------------------------
-      # 6️⃣ Skip upload if no API key
+      # 6️⃣ Skip upload if missing FOSSA API key
       # -----------------------------------------------------------
       - name: ⚠️ Skip FOSSA upload if missing API key
         if: env.FOSSA_API_KEY == ''
