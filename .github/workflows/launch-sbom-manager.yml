@@ -1,0 +1,11 @@
+name: 🚀 Launch SBOM Merge & Upload Workflow
+
+on:
+  schedule:
+    - cron: "0 1 * * *"   # ⏰ Run daily at 1:00 UTC
+  workflow_dispatch:        # Allow manual runs too
+
+jobs:
+  run-sbom-manager:
+    uses: ./.github/workflows/../sboms/.github/workflows/sbom-merge-and-upload.yml
+
