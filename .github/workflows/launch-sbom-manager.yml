@@ -103,9 +103,6 @@ jobs:
       # -----------------------------------------------------------
       # 5️⃣ Upload merged SBOMs to FOSSA
       # -----------------------------------------------------------
-            # -----------------------------------------------------------
-      # 5️⃣ Upload merged SBOMs to FOSSA
-      # -----------------------------------------------------------
       - name: ☁️ Upload merged SBOMs to FOSSA
         if: env.FOSSA_API_KEY != ''  # ✅ Only run if FOSSA API key exists
         run: |
@@ -120,13 +117,14 @@ jobs:
 
             if [ -f "$merged_file" ]; then
               echo "⬆️ Uploading merged SBOM for $project_name..."
-              # ✅ Fixed CLI syntax (removed --file)
+              
+              # ✅ Corrected CLI syntax
               fossa sbom analyze \
                 --fossa-api-key "${FOSSA_API_KEY}" \
-                --project-id "$project_name" \
+                --project "$project_name" \
                 --force-rescan \
                 "$merged_file"
-
+              
               echo "✅ Uploaded merged SBOM for $project_name"
             else
               echo "⚠️ No merged SBOM found for $project_name"
@@ -134,3 +132,4 @@ jobs:
           done
 
           echo "🎉 All merged SBOMs uploaded to FOSSA successfully."
+
