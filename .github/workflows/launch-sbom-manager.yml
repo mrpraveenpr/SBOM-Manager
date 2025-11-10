@@ -3,7 +3,7 @@ name: 🔄 Merge All Latest SBOMs & Upload to FOSSA (OMEA)
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 2 * * *"  # 🕑 Run daily at 02:00 UTC
+    - cron: "0 2 * * *" # 🕑 Run daily at 02:00 UTC
 
 jobs:
   merge-upload:
@@ -21,7 +21,7 @@ jobs:
       - name: 🧩 Checkout SBOM Manager Repo
         uses: actions/checkout@v4
         with:
-          persist-credentials: false  # ensure we use PAT, not GITHUB_TOKEN
+          persist-credentials: false
 
       # -----------------------------------------------------------
       # 2️⃣ Install CycloneDX CLI & FOSSA CLI
@@ -34,7 +34,6 @@ jobs:
           chmod +x cyclonedx-linux-x64
           sudo mv cyclonedx-linux-x64 /usr/local/bin/cyclonedx
           echo "✅ CycloneDX version: $(cyclonedx --version)"
-
           echo "📦 Installing FOSSA CLI..."
           curl -sSL -o /tmp/fossa.tar.gz https://github.com/fossas/fossa-cli/releases/download/v3.12.1/fossa_3.12.1_linux_amd64.tar.gz
           tar -xzf /tmp/fossa.tar.gz -C /tmp
@@ -42,7 +41,7 @@ jobs:
           echo "✅ FOSSA version: $(fossa --version)"
 
       # -----------------------------------------------------------
-      # 3️⃣ Collect and merge all latest SBOMs
+      # 3️⃣ Merge all latest SBOMs
       # -----------------------------------------------------------
       - name: 🔁 Merge all latest SBOMs into a single file
         run: |
@@ -51,7 +50,7 @@ jobs:
           MERGED_FILE="$BASE_DIR/complete-merged-sbom.cdx.json"
           TEMP_LIST="/tmp/sbom-list.txt"
 
-          echo "🔍 Collecting all latest SBOMs (excluding old/ and merged files)..."
+          echo "🔍 Collecting latest SBOMs..."
           rm -f "$TEMP_LIST"
           find "$BASE_DIR" -type f -name "*.cdx.json" \
             ! -path "*/old/*" \
@@ -63,7 +62,7 @@ jobs:
             exit 0
           fi
 
-          echo "🧩 Merging $(wc -l < $TEMP_LIST) SBOM(s) into a single complete SBOM..."
+          echo "🧩 Merging $(wc -l < $TEMP_LIST) SBOM(s)..."
           cyclonedx merge --input-files $(cat "$TEMP_LIST") --output-file "$MERGED_FILE"
           echo "✅ Created unified SBOM → $MERGED_FILE"
 
@@ -74,20 +73,14 @@ jobs:
         if: ${{ env.SBOM_PUSH_TOKEN != '' }}
         run: |
           set -e
-          echo "💾 Configuring Git..."
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
 
-          echo "📦 Preparing commit..."
           git add sboms/complete-merged-sbom.cdx.json
           git commit -m "🧩 Complete merged SBOM generated - $(date -u '+%Y-%m-%d %H:%M:%S')" || echo "ℹ️ No new changes to commit"
 
-          echo "🔐 Reconfiguring authenticated remote..."
-          git remote remove origin || true
-          git remote add origin https://x-access-token:${SBOM_PUSH_TOKEN}@github.com/mrpraveenpr/SBOM-Manager.git
-
-          echo "🚀 Pushing changes to main branch..."
-          git push origin main || (echo "❌ Push failed"; exit 1)
+          git remote set-url origin https://x-access-token:${SBOM_PUSH_TOKEN}@github.com/mrpraveenpr/SBOM-Manager.git
+          git push origin main
           echo "✅ Complete merged SBOM committed & pushed successfully."
 
       # -----------------------------------------------------------
@@ -98,7 +91,6 @@ jobs:
         run: |
           set -euo pipefail
           MERGED_FILE="sboms/complete-merged-sbom.cdx.json"
-
           if [ -f "$MERGED_FILE" ]; then
             echo "🚀 Uploading unified SBOM to FOSSA project: ${FOSSA_PROJECT_NAME}..."
             fossa sbom analyze \
@@ -106,7 +98,7 @@ jobs:
               --project "${FOSSA_PROJECT_NAME}" \
               --force-rescan \
               "$MERGED_FILE"
-            echo "✅ Successfully uploaded complete merged SBOM to ${FOSSA_PROJECT_NAME}"
+            echo "✅ Uploaded merged SBOM to FOSSA project ${FOSSA_PROJECT_NAME}"
           else
             echo "⚠️ No unified SBOM found to upload."
           fi
@@ -115,5 +107,5 @@ jobs:
       # 6️⃣ Skip upload if missing tokens
       # -----------------------------------------------------------
       - name: ⚠️ Skip steps if tokens missing
-        if: "${{ env.FOSSA_API_KEY == '' || env.SBOM_PUSH_TOKEN == '' }}"
+        if: ${{ env.FOSSA_API_KEY == '' || env.SBOM_PUSH_TOKEN == '' }}
         run: echo "⚠️ Missing token(s): ensure SBOM_PUSH_TOKEN and FOSSA_API_KEY are set in repo secrets."
