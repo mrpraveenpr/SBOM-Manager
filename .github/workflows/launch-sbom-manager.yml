@@ -12,7 +12,7 @@ jobs:
       FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
       FOSSA_PROJECT_NAME: "OMEA"
       FOSSA_TELEMETRY_SCOPE: off
-      PUSH_TOKEN: ${{ secrets.SBOM_PUSH_TOKEN }}
+      SBOM_PUSH_TOKEN: ${{ secrets.SBOM_PUSH_TOKEN }}
 
     steps:
       # -----------------------------------------------------------
@@ -34,6 +34,7 @@ jobs:
           chmod +x cyclonedx-linux-x64
           sudo mv cyclonedx-linux-x64 /usr/local/bin/cyclonedx
           echo "✅ CycloneDX version: $(cyclonedx --version)"
+
           echo "📦 Installing FOSSA CLI..."
           curl -sSL -o /tmp/fossa.tar.gz https://github.com/fossas/fossa-cli/releases/download/v3.12.1/fossa_3.12.1_linux_amd64.tar.gz
           tar -xzf /tmp/fossa.tar.gz -C /tmp
@@ -67,13 +68,12 @@ jobs:
           echo "✅ Created unified SBOM → $MERGED_FILE"
 
       # -----------------------------------------------------------
-      # 4️⃣ Commit and Push merged SBOM (using Personal Access Token)
+      # 4️⃣ Commit and Push merged SBOM (using SBOM_PUSH_TOKEN)
       # -----------------------------------------------------------
       - name: 💾 Commit and Push merged SBOM
-        if: env.PUSH_TOKEN != ''
+        if: ${{ env.SBOM_PUSH_TOKEN != '' }}
         run: |
           set -e
-
           echo "💾 Configuring Git..."
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
@@ -84,18 +84,17 @@ jobs:
 
           echo "🔐 Reconfiguring authenticated remote..."
           git remote remove origin || true
-          git remote add origin https://x-access-token:${PUSH_TOKEN}@github.com/mrpraveenpr/SBOM-Manager.git
+          git remote add origin https://x-access-token:${SBOM_PUSH_TOKEN}@github.com/mrpraveenpr/SBOM-Manager.git
 
           echo "🚀 Pushing changes to main branch..."
           git push origin main || (echo "❌ Push failed"; exit 1)
-
           echo "✅ Complete merged SBOM committed & pushed successfully."
 
       # -----------------------------------------------------------
       # 5️⃣ Upload unified SBOM to FOSSA (OMEA)
       # -----------------------------------------------------------
       - name: ☁️ Upload unified SBOM to FOSSA (OMEA)
-        if: env.FOSSA_API_KEY != ''
+        if: ${{ env.FOSSA_API_KEY != '' }}
         run: |
           set -euo pipefail
           MERGED_FILE="sboms/complete-merged-sbom.cdx.json"
@@ -116,5 +115,5 @@ jobs:
       # 6️⃣ Skip upload if missing tokens
       # -----------------------------------------------------------
       - name: ⚠️ Skip steps if tokens missing
-        if: env.FOSSA_API_KEY == '' || env.PUSH_TOKEN == ''
+        if: ${{ env.FOSSA_API_KEY == '' || env.SBOM_PUSH_TOKEN == '' }}
         run: echo "⚠️ Missing token(s): ensure SBOM_PUSH_TOKEN and FOSSA_API_KEY are set in repo secrets."
