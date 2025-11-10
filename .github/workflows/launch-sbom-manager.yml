@@ -1,37 +1,31 @@
-name: 🔄 SBOM Merge & Upload to FOSSA
+name: 🔄 Merge All Latest SBOMs & Upload to FOSSA (OMEA)
 
 on:
-  schedule:
-    - cron: "0 1 * * *"   # ⏰ Run daily at 01:00 UTC
   workflow_dispatch:
-
-permissions:
-  contents: write   # ✅ Required to allow push access using GITHUB_TOKEN
+  schedule:
+    - cron: "0 2 * * *"  # 🕑 Run daily at 02:00 UTC
 
 jobs:
-  sbom-merge-upload:
-    name: Merge SBOMs & Upload to FOSSA
+  merge-upload:
     runs-on: ubuntu-latest
-
     env:
       FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
+      FOSSA_PROJECT_NAME: "OMEA"
       FOSSA_TELEMETRY_SCOPE: off
-      TOKEN: ${{ secrets.SBOM_PUSH_TOKEN || secrets.GITHUB_TOKEN }}  # ✅ Use PAT if provided, else fallback to built-in token
 
     steps:
       # -----------------------------------------------------------
-      # 1️⃣ Checkout sbom-manager repo
+      # 1️⃣ Checkout repo
       # -----------------------------------------------------------
-      - name: 🧩 Checkout sbom-manager
+      - name: 🧩 Checkout SBOM Manager Repo
         uses: actions/checkout@v4
 
       # -----------------------------------------------------------
-      # 2️⃣ Install CycloneDX CLI + FOSSA CLI
+      # 2️⃣ Install CycloneDX CLI & FOSSA CLI
       # -----------------------------------------------------------
-      - name: 🔧 Install CycloneDX & FOSSA CLI
+      - name: 🔧 Install CycloneDX CLI & FOSSA CLI
         run: |
           sudo apt-get update -y && sudo apt-get install -y jq
-          
           echo "📦 Installing CycloneDX CLI..."
           wget -q https://github.com/CycloneDX/cyclonedx-cli/releases/latest/download/cyclonedx-linux-x64
           chmod +x cyclonedx-linux-x64
@@ -45,91 +39,66 @@ jobs:
           echo "✅ FOSSA version: $(fossa --version)"
 
       # -----------------------------------------------------------
-      # 3️⃣ Merge latest SBOMs in each project folder
+      # 3️⃣ Collect all latest SBOMs from all projects & merge
       # -----------------------------------------------------------
-      - name: 🔁 Merge latest SBOMs per project folder
+      - name: 🔁 Merge all latest SBOMs into a single file
         run: |
           set -euo pipefail
           BASE_DIR="sboms"
-          echo "🔍 Scanning for projects inside $BASE_DIR..."
+          MERGED_FILE="$BASE_DIR/complete-merged-sbom.cdx.json"
+          TEMP_LIST="/tmp/sbom-list.txt"
+          echo "🔍 Collecting all latest SBOMs (excluding old/ and merged files)..."
 
-          for project_dir in $BASE_DIR/*; do
-            [ -d "$project_dir" ] || continue
-            [[ "$project_dir" == *".github"* ]] && continue  # skip internal folder
-            project_name=$(basename "$project_dir")
+          rm -f "$TEMP_LIST"
+          find "$BASE_DIR" -type f -name "*.cdx.json" \
+            ! -path "*/old/*" \
+            ! -name "merged-sbom.cdx.json" \
+            ! -name "complete-merged-sbom.cdx.json" > "$TEMP_LIST"
 
-            echo ""
-            echo "📂 Processing project: $project_name"
-            cd "$project_dir"
+          if [ ! -s "$TEMP_LIST" ]; then
+            echo "⚠️ No SBOMs found to merge."
+            exit 0
+          fi
 
-            latest_sboms=($(find . -maxdepth 1 -type f -name "*.cdx.json" ! -name "merged-sbom.cdx.json" | sort))
-            if [ ${#latest_sboms[@]} -eq 0 ]; then
-              echo "⚠️ No SBOMs found in $project_name"
-              cd - >/dev/null
-              continue
-            fi
-
-            echo "🧩 Merging ${#latest_sboms[@]} SBOM(s)..."
-            cyclonedx merge --input-files ${latest_sboms[*]} --output-file merged-sbom.cdx.json
-            echo "✅ Created merged-sbom.cdx.json for $project_name"
-
-            mkdir -p old
-            timestamp=$(date +'%Y%m%d_%H%M%S')
-            for sbom in "${latest_sboms[@]}"; do
-              mv "$sbom" "old/${sbom#./}-${timestamp}.cdx.json"
-            done
-
-            cd - >/dev/null
-          done
+          echo "🧩 Merging $(wc -l < $TEMP_LIST) SBOM(s) into a single complete SBOM..."
+          cyclonedx merge --input-files $(cat "$TEMP_LIST") --output-file "$MERGED_FILE"
+          echo "✅ Created unified SBOM → $MERGED_FILE"
 
       # -----------------------------------------------------------
-      # 4️⃣ Commit and Push merged SBOMs
+      # 4️⃣ Commit & Push merged SBOM
       # -----------------------------------------------------------
-      - name: 💾 Commit and Push merged SBOMs
+      - name: 💾 Commit and Push merged SBOM
         run: |
-          set -euo pipefail
-          echo "💾 Preparing to commit merged SBOMs..."
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
-
-          # ✅ Re-authenticate remote using PAT or GITHUB_TOKEN
-          git remote set-url origin https://x-access-token:${TOKEN}@github.com/mrpraveenpr/SBOM-Manager.git
-
-          git add sboms/
-          git commit -m "🧩 Daily SBOM merge & archive - $(date -u '+%Y-%m-%d %H:%M:%S')" || echo "ℹ️ No new merges to commit"
-          git push origin main || (echo "⚠️ Push failed, check token permissions!" && exit 1)
-          echo "✅ SBOMs updated and pushed successfully."
+          git add sboms/complete-merged-sbom.cdx.json
+          git commit -m "🧩 Complete merged SBOM generated - $(date -u '+%Y-%m-%d %H:%M:%S')" || echo "ℹ️ No changes to commit"
+          git push origin main
+          echo "✅ Complete merged SBOM committed & pushed successfully."
 
       # -----------------------------------------------------------
-      # 5️⃣ Upload merged SBOMs to FOSSA
+      # 5️⃣ Upload unified SBOM to FOSSA/OMEA
       # -----------------------------------------------------------
-      - name: ☁️ Upload merged SBOMs to FOSSA
-        if: env.FOSSA_API_KEY != ''  # ✅ Only run if FOSSA API key exists
+      - name: ☁️ Upload unified SBOM to FOSSA (OMEA)
+        if: env.FOSSA_API_KEY != ''
         run: |
           set -euo pipefail
-          echo "🚀 Uploading merged SBOMs to FOSSA..."
+          MERGED_FILE="sboms/complete-merged-sbom.cdx.json"
+          if [ -f "$MERGED_FILE" ]; then
+            echo "🚀 Uploading unified SBOM to FOSSA project: ${FOSSA_PROJECT_NAME}..."
+            fossa sbom analyze \
+              --fossa-api-key "${FOSSA_API_KEY}" \
+              --project "${FOSSA_PROJECT_NAME}" \
+              --force-rescan \
+              "$MERGED_FILE"
+            echo "✅ Successfully uploaded complete merged SBOM to ${FOSSA_PROJECT_NAME}"
+          else
+            echo "⚠️ No unified SBOM found to upload."
+          fi
 
-          for project_dir in sboms/*; do
-            [ -d "$project_dir" ] || continue
-            [[ "$project_dir" == *".github"* ]] && continue
-            merged_file="$project_dir/merged-sbom.cdx.json"
-            project_name=$(basename "$project_dir")
-
-            if [ -f "$merged_file" ]; then
-              echo "⬆️ Uploading merged SBOM for $project_name..."
-              
-              # ✅ Corrected CLI syntax
-              fossa sbom analyze \
-                --fossa-api-key "${FOSSA_API_KEY}" \
-                --project "$project_name" \
-                --force-rescan \
-                "$merged_file"
-              
-              echo "✅ Uploaded merged SBOM for $project_name"
-            else
-              echo "⚠️ No merged SBOM found for $project_name"
-            fi
-          done
-
-          echo "🎉 All merged SBOMs uploaded to FOSSA successfully."
-
+      # -----------------------------------------------------------
+      # 6️⃣ Skip upload if no API key
+      # -----------------------------------------------------------
+      - name: ⚠️ Skip FOSSA upload if missing API key
+        if: env.FOSSA_API_KEY == ''
+        run: echo "⚠️ No FOSSA_API_KEY found — skipping upload step."
