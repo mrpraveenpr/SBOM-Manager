@@ -5,6 +5,10 @@ on:
     - cron: "0 1 * * *"   # ⏰ Run daily at 01:00 UTC
   workflow_dispatch:
 
+# ✅ Added permissions so the GitHub Actions bot can push to this repo
+permissions:
+  contents: write
+
 defaults:
   run:
     working-directory: sboms   # 👈 All steps now execute from /sboms folder
