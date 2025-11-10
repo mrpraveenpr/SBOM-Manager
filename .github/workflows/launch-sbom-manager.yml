@@ -21,7 +21,7 @@ jobs:
       - name: 🧩 Checkout SBOM Manager Repo
         uses: actions/checkout@v4
         with:
-          persist-credentials: false  # prevent use of default GITHUB_TOKEN
+          persist-credentials: false  # ensure we use PAT, not GITHUB_TOKEN
 
       # -----------------------------------------------------------
       # 2️⃣ Install CycloneDX CLI & FOSSA CLI
@@ -115,5 +115,5 @@ jobs:
       # 6️⃣ Skip upload if missing tokens
       # -----------------------------------------------------------
       - name: ⚠️ Skip steps if tokens missing
-        if: ${{ env.FOSSA_API_KEY == '' || env.SBOM_PUSH_TOKEN == '' }}
+        if: "${{ env.FOSSA_API_KEY == '' || env.SBOM_PUSH_TOKEN == '' }}"
         run: echo "⚠️ Missing token(s): ensure SBOM_PUSH_TOKEN and FOSSA_API_KEY are set in repo secrets."
