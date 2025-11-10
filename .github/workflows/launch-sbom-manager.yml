@@ -64,17 +64,16 @@ jobs:
           cyclonedx merge --input-files $(cat "$TEMP_LIST") --output-file "$MERGED_FILE"
           echo "✅ Created unified SBOM → $MERGED_FILE"
 
-      # -----------------------------------------------------------
-      # 4️⃣ Commit & Push merged SBOM
-      # -----------------------------------------------------------
       - name: 💾 Commit and Push merged SBOM
         run: |
-          git config --global user.name "GitHub Actions Bot"
-          git config --global user.email "actions@github.com"
-          git add sboms/complete-merged-sbom.cdx.json
-          git commit -m "🧩 Complete merged SBOM generated - $(date -u '+%Y-%m-%d %H:%M:%S')" || echo "ℹ️ No changes to commit"
-          git push origin main
-          echo "✅ Complete merged SBOM committed & pushed successfully."
+         git config --global user.name "GitHub Actions Bot"
+         git config --global user.email "actions@github.com"
+         git add sboms/complete-merged-sbom.cdx.json
+         git commit -m "🧩 Complete merged SBOM generated - $(date -u '+%Y-%m-%d %H:%M:%S')" || echo "ℹ️ No changes to commit"
+         git remote set-url origin https://x-access-token:${{ secrets.SBOM_PUSH_TOKEN }}@github.com/mrpraveenpr/SBOM-Manager.git
+         git push origin main
+         echo "✅ Complete merged SBOM committed & pushed successfully."
+
 
       # -----------------------------------------------------------
       # 5️⃣ Upload unified SBOM to FOSSA/OMEA
