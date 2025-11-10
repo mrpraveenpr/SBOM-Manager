@@ -63,7 +63,9 @@ jobs:
           fi
 
           echo "🧩 Merging $(wc -l < $TEMP_LIST) SBOM(s)..."
-          cyclonedx merge --input-files $(cat "$TEMP_LIST") --output-file "$MERGED_FILE"
+          # ⭐️ FIX: Use xargs to pass the file list safely.
+          # This avoids the "Argument list too long" error if many files are found.
+          cat "$TEMP_LIST" | xargs cyclonedx merge --output-file "$MERGED_FILE"
           echo "✅ Created unified SBOM → $MERGED_FILE"
 
       # -----------------------------------------------------------
