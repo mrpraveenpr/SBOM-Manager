@@ -5,13 +5,18 @@ on:
     - cron: "0 1 * * *"   # ⏰ Run daily at 01:00 UTC
   workflow_dispatch:
 
+permissions:
+  contents: write   # ✅ Required to allow push access using GITHUB_TOKEN
+
 jobs:
   sbom-merge-upload:
     name: Merge SBOMs & Upload to FOSSA
     runs-on: ubuntu-latest
+
     env:
       FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
       FOSSA_TELEMETRY_SCOPE: off
+      TOKEN: ${{ secrets.SBOM_PUSH_TOKEN || secrets.GITHUB_TOKEN }}  # ✅ Use PAT if provided, else fallback to built-in token
 
     steps:
       # -----------------------------------------------------------
@@ -82,20 +87,26 @@ jobs:
       # -----------------------------------------------------------
       - name: 💾 Commit and Push merged SBOMs
         run: |
+          set -euo pipefail
+          echo "💾 Preparing to commit merged SBOMs..."
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
+
+          # ✅ Re-authenticate remote using PAT or GITHUB_TOKEN
+          git remote set-url origin https://x-access-token:${TOKEN}@github.com/mrpraveenpr/SBOM-Manager.git
+
           git add sboms/
-          git commit -m "🧩 Daily SBOM merge & archive - $(date -u '+%Y-%m-%d %H:%M:%S')" || echo "ℹ️ No new merges"
-          git push origin main
+          git commit -m "🧩 Daily SBOM merge & archive - $(date -u '+%Y-%m-%d %H:%M:%S')" || echo "ℹ️ No new merges to commit"
+          git push origin main || (echo "⚠️ Push failed, check token permissions!" && exit 1)
           echo "✅ SBOMs updated and pushed successfully."
 
       # -----------------------------------------------------------
       # 5️⃣ Upload merged SBOMs to FOSSA
       # -----------------------------------------------------------
       - name: ☁️ Upload merged SBOMs to FOSSA
+        if: env.FOSSA_API_KEY != ''  # ✅ Only run if FOSSA API key exists
         run: |
           set -euo pipefail
-          export FOSSA_TELEMETRY_SCOPE=off
           echo "🚀 Uploading merged SBOMs to FOSSA..."
 
           for project_dir in sboms/*; do
@@ -117,3 +128,10 @@ jobs:
           done
 
           echo "🎉 All merged SBOMs uploaded to FOSSA successfully."
+
+      # -----------------------------------------------------------
+      # 6️⃣ Skip FOSSA gracefully if no key
+      # -----------------------------------------------------------
+      - name: ⏩ Skip FOSSA (no API key)
+        if: env.FOSSA_API_KEY == ''
+        run: echo "⚠️ No FOSSA_API_KEY found — skipping upload step."
