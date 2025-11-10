@@ -1,4 +1,5 @@
 {
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
   "serialNumber": "urn:uuid:899e0f27-77d2-4d00-8bbc-f8bde493aa20",
@@ -18,24 +19,10 @@
         }
       ]
     },
-    "authors": [
-      {
-        "name": "OWASP Foundation"
-      }
-    ],
-    "lifecycles": [
-      {
-        "phase": "build"
-      }
-    ],
     "component": {
-      "author": "leonardovff",
-      "group": "",
-      "name": "bookstore:latest",
-      "version": "1.0.0",
-      "type": "container",
-      "purl": "pkg:npm/nodejs-bookstore-api@1.0.0",
       "bom-ref": "41a5895a-a128-495c-94b6-4e6801d9cf89",
+      "type": "container",
+      "name": "bookstore:latest",
       "properties": [
         {
           "name": "aquasecurity:trivy:DiffID",
@@ -90,17 +77,7 @@
           "value": "633434624"
         }
       ]
-    },
-    "properties": [
-      {
-        "name": "cdx:bom:componentTypes",
-        "value": "npm"
-      },
-      {
-        "name": "cdx:bom:componentNamespaces",
-        "value": "@ampproject\\n@aws-crypto\\n@aws-sdk\\n@babel\\n@bcoe\\n@colors\\n@cspotcode\\n@dabh\\n@eslint\\n@exodus\\n@hapi\\n@humanwhocodes\\n@istanbuljs\\n@jest\\n@jridgewell\\n@nodelib\\n@prisma\\n@sideway\\n@sinclair\\n@sinonjs\\n@tsconfig\\n@types\\n@typescript-eslint"
-      }
-    ]
+    }
   },
   "components": [
     {
@@ -71162,7 +71139,6 @@
       "dependsOn": []
     }
   ],
-  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
   "vulnerabilities": [
     {
       "id": "CVE-2021-32050",
