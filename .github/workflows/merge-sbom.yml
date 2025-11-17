@@ -3,25 +3,20 @@ name: Merge SBOM Files
 on:
   push:
     branches:
-      - "*"          # Trigger for every branch
-    branches-ignore:
-      - release-1.0.0
+      - "release-*"
 
 jobs:
   merge-sbom:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout the branch that contains the SBOM files
       - name: Checkout SBOM Manager Repository
         uses: actions/checkout@v4
 
-      # Install CycloneDX merge tool (cdxgen)
       - name: Install CycloneDX cdxgen
         run: |
           npm install -g @cyclonedx/cdxgen
 
-      # Merge the two SBOM files
       - name: Merge SBOM Files
         run: |
           if [ ! -f "sbom-source.json" ]; then
@@ -38,7 +33,6 @@ jobs:
           cdxgen --merge sbom-source.json sbom-docker.json -o merged-sbom.json
           echo "Merged SBOM generated: merged-sbom.json"
 
-      # Commit merged SBOM back to the same branch
       - name: Commit and Push Merged SBOM
         run: |
           git config --global user.name "github-actions"
