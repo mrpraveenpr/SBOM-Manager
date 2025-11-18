@@ -77,9 +77,8 @@ jobs:
 
           echo "Uploading merged-sbom.json to FOSSA project 'Origin Medical', revision $BRANCH"
 
-          fossa analyze \
+          fossa sbom analyze merged-sbom.json \
             --project "Origin Medical" \
-            --revision "$BRANCH" \
-            --sbom merged-sbom.json
+            --revision "$BRANCH"
 
           echo "FOSSA import complete"
