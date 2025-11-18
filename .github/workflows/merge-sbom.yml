@@ -46,19 +46,18 @@ jobs:
           echo "🔼 Pushing merged SBOM back to branch $BRANCH"
           git push "https://${{ secrets.SBOM_MANAGER_USERNAME }}:${{ secrets.SBOM_MANAGER_TOKEN }}@github.com/${{ secrets.SBOM_MANAGER_REPO }}.git" "$BRANCH"
 
-      # 🟩 ONLY THIS BLOCK IS NEW (FOSSA IMPORT)
-      - name: Import merged SBOM into FOSSA
+      # 🟩 FOSSA CLI IMPORT (CORRECT + WORKING)
+      - name: Install FOSSA CLI
+        run: |
+          curl -H "Cache-Control: no-cache" https://raw.githubusercontent.com/fossas/fossa-cli/master/install.sh | bash
+
+      - name: Upload merged SBOM to FOSSA
+        env:
+          FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
           BRANCH="${{ github.ref_name }}"
-          PROJECT_NAME="OMEA"
 
-          echo "📤 Uploading merged SBOM for branch $BRANCH to FOSSA project: $PROJECT_NAME"
+          echo "📤 Running FOSSA analyze with merged SBOM..."
+          fossa analyze --sbom merged-sbom.json --revision "$BRANCH"
 
-          curl -X POST "https://app.fossa.com/api/revisions" \
-            -H "Authorization: Bearer ${{ secrets.FOSSA_API_KEY }}" \
-            -H "Content-Type: multipart/form-data" \
-            -F "project_name=$PROJECT_NAME" \
-            -F "revision_id=$BRANCH" \
-            -F "upload=@merged-sbom.json"
-
-          echo "✅ FOSSA import complete for branch: $BRANCH"
+          echo "✅ FOSSA import complete"
