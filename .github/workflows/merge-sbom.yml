@@ -14,33 +14,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout the correct branch
-      - name: Checkout Repository
+      - name: Checkout Repository with PAT
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SBOM_MANAGER_TOKEN }}
 
-      # Install CycloneDX merge tool
       - name: Install cdxgen
         run: npm install -g @cyclonedx/cdxgen
 
-      # Merge SBOM files
       - name: Merge SBOM Files
         run: |
-          if [ ! -f "sbom-source.json" ]; then
-            echo "❌ sbom-source.json missing"
-            exit 1
-          fi
-
-          if [ ! -f "sbom-docker.json" ]; then
-            echo "❌ sbom-docker.json missing"
-            exit 1
-          fi
-
-          echo "🔄 Merging SBOM files..."
           cdxgen --merge sbom-source.json sbom-docker.json -o merged-sbom.json
-          echo "✅ Merged SBOM generated: merged-sbom.json"
 
-      # Commit & Push using PAT (not GitHub Actions bot)
-      - name: Commit & Push Merged SBOM
+      - name: Commit and Push merged SBOM
         run: |
           BRANCH="${{ github.ref_name }}"
 
@@ -48,8 +34,6 @@ jobs:
           git config --global user.email "github-actions@github.com"
 
           git add merged-sbom.json
-          git commit -m "Add merged SBOM for branch $BRANCH" || echo "No changes to commit"
-
-          echo "🔐 Pushing with PAT to: $BRANCH"
+          git commit -m "Add merged SBOM for branch $BRANCH" || true
 
           git push https://${{ secrets.SBOM_MANAGER_USERNAME }}:${{ secrets.SBOM_MANAGER_TOKEN }}@github.com/${{ secrets.SBOM_MANAGER_REPO }} "$BRANCH"
