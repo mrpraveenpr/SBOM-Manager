@@ -26,7 +26,8 @@ jobs:
             -v "$(pwd)":/data \
             cyclonedx/cyclonedx-cli:latest \
             merge \
-              --input-files /data/sbom-source.json,/data/sbom-docker.json \
+              --input-files /data/sbom-source.json \
+              --input-files /data/sbom-docker.json \
               --output-file /data/merged-sbom.json
 
           echo "✅ Merged SBOM created:"
@@ -42,4 +43,5 @@ jobs:
           git add merged-sbom.json
           git commit -m "Add merged SBOM for branch $BRANCH [skip ci]" || true
 
-          git push https://${{ secrets.SBOM_MANAGER_USERNAME }}:${{ secrets.SBOM_MANAGER_TOKEN }}@github.com/${{ secrets.SBOM_MANAGER_REPO }} "$BRANCH"
+          echo "🔼 Pushing merged SBOM back to branch $BRANCH"
+          git push "https://${{ secrets.SBOM_MANAGER_USERNAME }}:${{ secrets.SBOM_MANAGER_TOKEN }}@github.com/${{ secrets.SBOM_MANAGER_REPO }}.git" "$BRANCH"
