@@ -18,17 +18,16 @@ jobs:
         with:
           token: ${{ secrets.SBOM_MANAGER_TOKEN }}
 
-      - name: Install CycloneDX CLI (Python)
+      - name: Merge SBOM Files Properly (Docker)
         run: |
-          pip install cyclonedx-bom
+          echo "🔄 Starting proper SBOM merge using Docker CLI..."
 
-      - name: Merge SBOM Files Properly
-        run: |
-          echo "🔄 Starting proper SBOM merge..."
-
-          cyclonedx-bom merge \
-            --input-files sbom-source.json sbom-docker.json \
-            --output-file merged-sbom.json
+          docker run --rm \
+            -v "$(pwd)":/data \
+            cyclonedx/cyclonedx-cli:latest \
+            merge \
+              --input-files /data/sbom-source.json,/data/sbom-docker.json \
+              --output-file /data/merged-sbom.json
 
           echo "✅ Merged SBOM created:"
           cat merged-sbom.json
