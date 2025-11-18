@@ -13,14 +13,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout with PAT
+      # ---------------------------------------------------------
+      # Checkout Repository
+      # ---------------------------------------------------------
+      - name: Checkout Repository (using PAT)
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.SBOM_MANAGER_TOKEN }}
 
-      - name: Merge SBOM Files Properly (Docker)
+      # ---------------------------------------------------------
+      # 1. Merge CycloneDX SBOM Files
+      # ---------------------------------------------------------
+      - name: Merge SBOM Files (CycloneDX CLI via Docker)
         run: |
-          echo "🔄 Starting proper SBOM merge using Docker CLI..."
+          echo "Starting SBOM merge using CycloneDX CLI..."
 
           docker run --rm \
             -v "$(pwd)":/data \
@@ -30,10 +36,13 @@ jobs:
               --input-files /data/sbom-docker.json \
               --output-file /data/merged-sbom.json
 
-          echo "✅ Merged SBOM created:"
+          echo "Merged SBOM created:"
           cat merged-sbom.json
 
-      - name: Commit & Push merged SBOM
+      # ---------------------------------------------------------
+      # 2. Commit and Push Merged SBOM
+      # ---------------------------------------------------------
+      - name: Commit and Push Merged SBOM
         run: |
           BRANCH="${{ github.ref_name }}"
 
@@ -43,22 +52,46 @@ jobs:
           git add merged-sbom.json
           git commit -m "Add merged SBOM for branch $BRANCH [skip ci]" || true
 
-          echo "🔼 Pushing merged SBOM back to branch $BRANCH"
-          git push "https://${{ secrets.SBOM_MANAGER_USERNAME }}:${{ secrets.SBOM_MANAGER_TOKEN }}@github.com/${{ secrets.SBOM_MANAGER_REPO }}.git" "$BRANCH"
+          echo "Pushing merged SBOM to branch $BRANCH"
+          git push \
+            "https://${{ secrets.SBOM_MANAGER_USERNAME }}:${{ secrets.SBOM_MANAGER_TOKEN }}@github.com/${{ secrets.SBOM_MANAGER_REPO }}.git" \
+            "$BRANCH"
 
-      # 🟩 FOSSA CLI IMPORT (CORRECT v3 + WORKING)
+      # ---------------------------------------------------------
+      # 3. Convert CycloneDX → FOSSA-Compatible Format
+      # ---------------------------------------------------------
+      - name: Convert CycloneDX SBOM to FOSSA Format (fossa-deps.json)
+        run: |
+          echo "Converting merged-sbom.json to FOSSA dependency format"
+          npm install -g @cyclonedx/cdxgen
+
+          cdxgen --make-fossa-deps merged-sbom.json -o fossa-deps.json
+
+          echo "Converted SBOM:"
+          cat fossa-deps.json
+
+      # ---------------------------------------------------------
+      # 4. Install FOSSA CLI v3
+      # ---------------------------------------------------------
       - name: Install FOSSA CLI v3
         run: |
-          curl -H "Cache-Control: no-cache" https://raw.githubusercontent.com/fossas/fossa-cli/master/install-latest.sh | bash
-          echo "$HOME/.fossa/bin" >> $GITHUB_PATH
+          curl -H "Cache-Control: no-cache" \
+            https://raw.githubusercontent.com/fossas/fossa-cli/master/install-latest.sh | bash
 
-      - name: Upload merged SBOM to FOSSA
+          echo "$HOME/.fossa/bin" >> "$GITHUB_PATH"
+
+      # ---------------------------------------------------------
+      # 5. Upload SBOM to FOSSA
+      # ---------------------------------------------------------
+      - name: Upload SBOM to FOSSA
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
           BRANCH="${{ github.ref_name }}"
 
-          echo "📤 Running FOSSA analyze with merged SBOM using FOSSA CLI v3..."
-          fossa analyze --sbom merged-sbom.json --revision "$BRANCH"
+          echo "Uploading fossa-deps.json to FOSSA for revision $BRANCH"
+          fossa analyze \
+            --fossa-deps-file fossa-deps.json \
+            --revision "$BRANCH"
 
-          echo "✅ FOSSA import complete"
+          echo "FOSSA import complete"
