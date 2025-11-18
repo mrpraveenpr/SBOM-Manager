@@ -6,12 +6,18 @@ on:
       - main
       - "release-*"
 
+permissions:
+  contents: write
+
 jobs:
   merge-sbom:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository with PAT
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SBOM_MANAGER_TOKEN }}
 
       - name: Install cdxgen
         run: npm install -g @cyclonedx/cdxgen
@@ -30,5 +36,4 @@ jobs:
           git add merged-sbom.json
           git commit -m "Add merged SBOM for branch $BRANCH" || true
 
-          # 🔥 FIX: Use PAT token for push (NOT github-actions bot)
           git push https://${{ secrets.SBOM_MANAGER_USERNAME }}:${{ secrets.SBOM_MANAGER_TOKEN }}@github.com/${{ secrets.SBOM_MANAGER_REPO }} "$BRANCH"
