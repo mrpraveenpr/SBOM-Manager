@@ -18,20 +18,19 @@ jobs:
         with:
           token: ${{ secrets.SBOM_MANAGER_TOKEN }}
 
-      # Install the official CycloneDX Toolkit (NOT cdxgen merge)
-      - name: Install CycloneDX CLI
+      - name: Install CycloneDX CLI (Python)
         run: |
-          npm install -g @cyclonedx/cyclonedx-cli
+          pip install cyclonedx-bom
 
       - name: Merge SBOM Files Properly
         run: |
           echo "🔄 Starting proper SBOM merge..."
-
+          
           cyclonedx merge \
             --input-files sbom-source.json sbom-docker.json \
             --output-file merged-sbom.json
 
-          echo "✅ PROPER merged SBOM generated:"
+          echo "✅ Merged SBOM created:"
           cat merged-sbom.json
 
       - name: Commit & Push merged SBOM
