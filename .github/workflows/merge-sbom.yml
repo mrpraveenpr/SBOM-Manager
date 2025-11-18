@@ -3,13 +3,13 @@ name: Merge SBOM Files
 on:
   push:
     branches:
-      - main
       - "release-*"
+    paths:
+      - "sbom-source.json"
+      - "sbom-docker.json"
 
 jobs:
   merge-sbom:
-    if: github.actor != 'github-actions[bot]'     # ← stops recursive triggers
-
     runs-on: ubuntu-latest
 
     steps:
