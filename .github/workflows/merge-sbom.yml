@@ -34,6 +34,11 @@ jobs:
             merge \
               --input-files /data/sbom-source.json \
               --input-files /data/sbom-docker.json \
+              --output-version v1_6 \
+              --hierarchical \
+              --group "Origin Medical System Inc" \
+              --name "OMEA Product SBOM" \
+              --version "2025.11.17" \
               --output-file /data/merged-sbom.json
 
           echo "Merged SBOM created:"
@@ -58,19 +63,6 @@ jobs:
             "$BRANCH"
 
       # ---------------------------------------------------------
-      # 3. Convert CycloneDX → FOSSA-Compatible Format
-      # ---------------------------------------------------------
-      - name: Convert CycloneDX SBOM to FOSSA Format (fossa-deps.json)
-        run: |
-          echo "Converting merged-sbom.json to FOSSA dependency format"
-          npm install -g @cyclonedx/cdxgen
-
-          cdxgen --make-fossa-deps merged-sbom.json -o fossa-deps.json
-
-          echo "Converted SBOM:"
-          cat fossa-deps.json
-
-      # ---------------------------------------------------------
       # 4. Install FOSSA CLI v3
       # ---------------------------------------------------------
       - name: Install FOSSA CLI v3
@@ -81,17 +73,17 @@ jobs:
           echo "$HOME/.fossa/bin" >> "$GITHUB_PATH"
 
       # ---------------------------------------------------------
-      # 5. Upload SBOM to FOSSA
+      # 5. Upload merged SBOM directly to FOSSA (no conversion)
       # ---------------------------------------------------------
-      - name: Upload SBOM to FOSSA
+      - name: Upload merged SBOM to FOSSA
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
           BRANCH="${{ github.ref_name }}"
 
-          echo "Uploading fossa-deps.json to FOSSA for revision $BRANCH"
+          echo "Uploading merged-sbom.json to FOSSA for revision $BRANCH"
           fossa analyze \
-            --fossa-deps-file fossa-deps.json \
+            --sbom merged-sbom.json \
             --revision "$BRANCH"
 
           echo "FOSSA import complete"
