@@ -25,8 +25,8 @@ jobs:
       - name: Merge SBOM Files Properly
         run: |
           echo "🔄 Starting proper SBOM merge..."
-          
-          cyclonedx merge \
+
+          cyclonedx-bom merge \
             --input-files sbom-source.json sbom-docker.json \
             --output-file merged-sbom.json
 
