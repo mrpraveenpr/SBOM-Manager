@@ -23,8 +23,12 @@ jobs:
       - name: Commit and Push merged SBOM
         run: |
           BRANCH="${{ github.ref_name }}"
+
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
+
           git add merged-sbom.json
           git commit -m "Add merged SBOM for branch $BRANCH" || true
-          git push origin "$BRANCH"
+
+          # 🔥 FIX: Use PAT token for push (NOT github-actions bot)
+          git push https://${{ secrets.SBOM_MANAGER_USERNAME }}:${{ secrets.SBOM_MANAGER_TOKEN }}@github.com/${{ secrets.SBOM_MANAGER_REPO }} "$BRANCH"
