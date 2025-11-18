@@ -46,10 +46,11 @@ jobs:
           echo "🔼 Pushing merged SBOM back to branch $BRANCH"
           git push "https://${{ secrets.SBOM_MANAGER_USERNAME }}:${{ secrets.SBOM_MANAGER_TOKEN }}@github.com/${{ secrets.SBOM_MANAGER_REPO }}.git" "$BRANCH"
 
-      # 🟩 FOSSA CLI IMPORT (CORRECT + WORKING)
-      - name: Install FOSSA CLI
+      # 🟩 FOSSA CLI IMPORT (CORRECT v3 + WORKING)
+      - name: Install FOSSA CLI v3
         run: |
-          curl -H "Cache-Control: no-cache" https://raw.githubusercontent.com/fossas/fossa-cli/master/install.sh | bash
+          curl -H "Cache-Control: no-cache" https://raw.githubusercontent.com/fossas/fossa-cli/master/install-latest.sh | bash
+          echo "$HOME/.fossa/bin" >> $GITHUB_PATH
 
       - name: Upload merged SBOM to FOSSA
         env:
@@ -57,7 +58,7 @@ jobs:
         run: |
           BRANCH="${{ github.ref_name }}"
 
-          echo "📤 Running FOSSA analyze with merged SBOM..."
+          echo "📤 Running FOSSA analyze with merged SBOM using FOSSA CLI v3..."
           fossa analyze --sbom merged-sbom.json --revision "$BRANCH"
 
           echo "✅ FOSSA import complete"
