@@ -58,40 +58,28 @@ jobs:
             "$BRANCH"
 
       # ---------------------------------------------------------
-      # 3. Convert CycloneDX → FOSSA-Compatible Format
-      # ---------------------------------------------------------
-      - name: Convert CycloneDX SBOM to FOSSA Format (fossa-deps.json)
-        run: |
-          echo "Converting merged-sbom.json to FOSSA dependency format"
-          npm install -g @cyclonedx/cdxgen
-
-          cdxgen --make-fossa-deps merged-sbom.json -o fossa-deps.json
-
-          echo "Converted SBOM:"
-          cat fossa-deps.json
-
-      # ---------------------------------------------------------
-      # 4. Install FOSSA CLI v3
+      # 3. Install FOSSA CLI v3
       # ---------------------------------------------------------
       - name: Install FOSSA CLI v3
         run: |
           curl -H "Cache-Control: no-cache" \
             https://raw.githubusercontent.com/fossas/fossa-cli/master/install-latest.sh | bash
-
           echo "$HOME/.fossa/bin" >> "$GITHUB_PATH"
 
       # ---------------------------------------------------------
-      # 5. Upload SBOM to FOSSA
+      # 4. Upload merged SBOM to FOSSA (project: Origin Medical)
       # ---------------------------------------------------------
-      - name: Upload SBOM to FOSSA
+      - name: Upload merged SBOM to FOSSA
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
           BRANCH="${{ github.ref_name }}"
 
-          echo "Uploading fossa-deps.json to FOSSA for revision $BRANCH"
+          echo "Uploading merged-sbom.json to FOSSA project 'Origin Medical', revision $BRANCH"
+
           fossa analyze \
-            --fossa-deps-file fossa-deps.json \
-            --revision "$BRANCH"
+            --project "Origin Medical" \
+            --revision "$BRANCH" \
+            --sbom merged-sbom.json
 
           echo "FOSSA import complete"
