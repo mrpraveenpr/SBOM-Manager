@@ -14,7 +14,7 @@ jobs:
 
     env:
       PROJECT_LOCATOR: "sbom+58434/Origin Medical"
-      RELEASE_GROUP_NAME: "demo-group"
+      RELEASE_GROUP_LOCATOR: "group/5121"
       PROJECT_NAME: "Origin Medical"
 
     steps:
@@ -78,34 +78,34 @@ jobs:
             --revision "$BRANCH"
 
       # ---------------------------------------------------------
-      # CREATE A NEW RELEASE IN RELEASE GROUP (EVERY RUN)
+      # CREATE NEW RELEASE (EVERY RUN)
       # ---------------------------------------------------------
-      - name: Create New Release in FOSSA Release Group
+      - name: Create New FOSSA Release
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
           RELEASE_TITLE="${{ github.ref_name }}-$(date +'%Y%m%d-%H%M%S')"
 
           echo "Creating new FOSSA Release: $RELEASE_TITLE"
-          echo "Release Group: $RELEASE_GROUP_NAME"
+          echo "Release Group Locator: $RELEASE_GROUP_LOCATOR"
           echo "Project Locator: $PROJECT_LOCATOR"
 
           fossa release-group create-release \
-            --release "$RELEASE_GROUP_NAME" \
+            --release "$RELEASE_GROUP_LOCATOR" \
             --title "$RELEASE_TITLE" \
             --project-locator "$PROJECT_LOCATOR" \
             --project-revision "${{ github.ref_name }}" \
             --project-branch "master"
 
       # ---------------------------------------------------------
-      # TRIGGER RELEASE GROUP BUILD
+      # TRIGGER FOSSA RELEASE GROUP BUILD
       # ---------------------------------------------------------
       - name: Trigger Release Group Build
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
           BUILD_OUTPUT=$(fossa release-group build start \
-            --release "$RELEASE_GROUP_NAME" \
+            --release "$RELEASE_GROUP_LOCATOR" \
             --json)
 
           echo "$BUILD_OUTPUT"
@@ -116,7 +116,7 @@ jobs:
       # ---------------------------------------------------------
       # POLL UNTIL BUILD COMPLETES
       # ---------------------------------------------------------
-      - name: Wait for Build
+      - name: Wait for Build Completion
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
           BUILD_ID: ${{ env.BUILD_ID }}
@@ -125,7 +125,7 @@ jobs:
 
           while true; do
             STATUS=$(fossa release-group build status \
-              --release "$RELEASE_GROUP_NAME" \
+              --release "$RELEASE_GROUP_LOCATOR" \
               --build-id "$BUILD_ID" \
               --json | jq -r '.status')
 
@@ -147,13 +147,13 @@ jobs:
       # ---------------------------------------------------------
       # GENERATE PDF REPORT
       # ---------------------------------------------------------
-      - name: Generate FOSSA Report
+      - name: Generate FOSSA PDF Report
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
-          echo "Generating PDF report for release group: $RELEASE_GROUP_NAME"
+          echo "Generating PDF report for release group: $RELEASE_GROUP_LOCATOR"
 
           fossa release-group report \
-            --name "$RELEASE_GROUP_NAME" \
+            --name "$RELEASE_GROUP_LOCATOR" \
             --format pdf \
             --output report.pdf
