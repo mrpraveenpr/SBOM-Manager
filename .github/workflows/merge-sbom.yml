@@ -4,10 +4,27 @@ on:
   push:
     branches:
       - "release-*"
+      - "feat/*"
     paths:
       - "sbom-source.json"
       - "sbom-docker.json"
-
+  pull_request:
+    branches:
+      - main
+      - develop
+      - "release-*"
+      - "feat/*"
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to run SBOM processing on"
+        required: false
+        default: ""
+      force:
+        description: "Force run even if no SBOM files changed"
+        type: boolean
+        required: false
+        default: false
 jobs:
   merge-sbom:
     runs-on: ubuntu-latest
@@ -28,16 +45,21 @@ jobs:
         run: |
           echo "Starting SBOM merge using CycloneDX CLI..."
 
+          # Debug file structure
+          echo "Workspace structure:"
+          ls -R .
+
           docker run --rm \
             -v "$(pwd)":/data \
             cyclonedx/cyclonedx-cli:latest \
             merge \
-              --input-files /data/sbom-source.json \
-              --input-files /data/sbom-docker.json \
-              --output-file /data/merged-sbom.json
+            --input-files /data/sboms/sbom-source.json \
+            --input-files /data/sboms/sbom-docker.json \
+            --output-file /data/sboms/merged-sbom.json
 
           echo "Merged SBOM created:"
-          cat merged-sbom.json
+          cat sboms/merged-sbom.json
+
 
       # ---------------------------------------------------------
       # 2. Commit and Push Merged SBOM
@@ -82,3 +104,31 @@ jobs:
             --revision "$BRANCH"
 
           echo "FOSSA import complete"
+
+          # ---------------------------------------------------------
+          
+      # 5. Create or Update FOSSA Release in Release Group
+      # ---------------------------------------------------------
+      - name: Create FOSSA Release (Release Group)
+        id: create_release
+        env:
+          FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
+          RELEASE_GROUP_ID: ${{ secrets.FOSSA_RELEASE_GROUP_ID }}
+        run: |
+          REVISION="${{ github.ref_name }}"
+
+          echo "Creating release for revision $REVISION"
+
+          BODY="{\"revision\": \"$REVISION\"}"
+
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: Bearer $FOSSA_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$BODY" \
+            "https://app.fossa.com/api/project_group/$RELEASE_GROUP_ID/release")
+
+          echo "$RESPONSE"
+          
+          RELEASE_ID=$(echo "$RESPONSE" | jq -r '.id')
+          echo "release_id=$RELEASE_ID" >> $GITHUB_OUTPUT
+
