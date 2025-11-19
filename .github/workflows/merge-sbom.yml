@@ -14,8 +14,10 @@ jobs:
 
     env:
       PROJECT_LOCATOR_ENC: "sbom%2B58434/Origin%20Medical"
-      RELEASE_GROUP_NAME: "demo-group"
+      RELEASE_GROUP_ID: "5191"
+      ORG_ID: "58434"   # <-- UPDATE this if needed
       PROJECT_NAME: "Origin Medical"
+      FOSSA_BASE: "https://app.fossa.com/api"
 
     steps:
       - name: Checkout Repository
@@ -50,63 +52,96 @@ jobs:
             https://raw.githubusercontent.com/fossas/fossa-cli/master/install-latest.sh | bash
           echo "$HOME/.fossa/bin" >> "$GITHUB_PATH"
 
-      - name: Upload merged SBOM to FOSSA
+      - name: Upload merged SBOM to FOSSA Project
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
           BRANCH="${{ github.ref_name }}"
           echo "Uploading SBOM to FOSSA project: $PROJECT_NAME"
+
           fossa sbom analyze merged-sbom.json \
             --project "$PROJECT_NAME" \
             --revision "$BRANCH"
 
-      - name: Create New FOSSA Release (fixed quoting)
+      # -------------------------------------------------------------
+      #  CREATE RELEASE-GROUP RELEASE USING FOSSA REST API
+      # -------------------------------------------------------------
+      - name: Create Release in FOSSA Release Group (REST API)
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
           BRANCH="${{ github.ref_name }}"
           RELEASE_TITLE="${BRANCH}-$(date +%Y%m%d-%H%M%S)"
 
-          echo "Creating new FOSSA Release: $RELEASE_TITLE"
-          echo "Release Group Name: $RELEASE_GROUP_NAME"
-          echo "Project Locator (encoded): $PROJECT_LOCATOR_ENC"
+          echo "Creating FOSSA Release: $RELEASE_TITLE in group $RELEASE_GROUP_ID"
 
-          fossa release-group create-release \
-            --debug \
-            --release-group "$RELEASE_GROUP_NAME" \
-            --title "$RELEASE_TITLE" \
-            --project-locator "$PROJECT_LOCATOR_ENC" \
-            --project-revision "$BRANCH" \
-            --project-branch "master"
+          RESPONSE=$(curl -s -X POST "$FOSSA_BASE/release-groups/$RELEASE_GROUP_ID/releases" \
+            -H "Authorization: token $FOSSA_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{
+                  \"title\": \"$RELEASE_TITLE\",
+                  \"projectLocator\": \"$PROJECT_LOCATOR_ENC\",
+                  \"revision\": \"$BRANCH\",
+                  \"branch\": \"master\"
+                }")
 
-      - name: Trigger Release Group Build
+          echo "API Response: $RESPONSE"
+
+          RELEASE_ID=$(echo "$RESPONSE" | jq -r '.id')
+
+          if [ "$RELEASE_ID" = "null" ] || [ -z "$RELEASE_ID" ]; then
+            echo "Failed to create release!"
+            exit 1
+          fi
+
+          echo "RELEASE_ID=$RELEASE_ID" >> $GITHUB_ENV
+          echo "Created Release ID: $RELEASE_ID"
+
+      # -------------------------------------------------------------
+      #  START BUILD FOR THE RELEASE
+      # -------------------------------------------------------------
+      - name: Start FOSSA Release Build (REST API)
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
+          RELEASE_ID: ${{ env.RELEASE_ID }}
         run: |
-          BUILD_OUTPUT=$(fossa release-group build start \
-            --release-group "$RELEASE_GROUP_NAME" \
-            --json)
+          echo "Starting FOSSA build for Release ID: $RELEASE_ID"
 
-          echo "$BUILD_OUTPUT"
-          BUILD_ID=$(echo "$BUILD_OUTPUT" | jq -r '.buildId')
+          RESPONSE=$(curl -s -X POST "$FOSSA_BASE/releases/$RELEASE_ID/builds" \
+            -H "Authorization: token $FOSSA_API_KEY" \
+            -H "Content-Type: application/json")
+
+          echo "Build Start Response: $RESPONSE"
+
+          BUILD_ID=$(echo "$RESPONSE" | jq -r '.id')
+
+          if [ "$BUILD_ID" = "null" ] || [ -z "$BUILD_ID" ]; then
+            echo "Failed to start build!"
+            exit 1
+          fi
+
           echo "BUILD_ID=$BUILD_ID" >> $GITHUB_ENV
+          echo "Build ID: $BUILD_ID"
 
-      - name: Wait for Build Completion
+      # -------------------------------------------------------------
+      # WAIT FOR BUILD COMPLETION
+      # -------------------------------------------------------------
+      - name: Wait for FOSSA Build Completion
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
+          RELEASE_ID: ${{ env.RELEASE_ID }}
           BUILD_ID: ${{ env.BUILD_ID }}
         run: |
-          echo "Waiting for FOSSA build to finish..."
-          while true; do
-            STATUS=$(fossa release-group build status \
-              --release-group "$RELEASE_GROUP_NAME" \
-              --build-id "$BUILD_ID" \
-              --json | jq -r '.status')
+          echo "Waiting for FOSSA build $BUILD_ID to finish..."
 
-            echo "Build status: $STATUS"
+          while true; do
+            STATUS=$(curl -s "$FOSSA_BASE/builds/$BUILD_ID" \
+              -H "Authorization: token $FOSSA_API_KEY" | jq -r '.status')
+
+            echo "Build Status: $STATUS"
 
             if [ "$STATUS" = "COMPLETE" ]; then
-              echo "Build completed!"
+              echo "Build completed successfully!"
               break
             fi
 
@@ -118,12 +153,19 @@ jobs:
             sleep 10
           done
 
-      - name: Generate FOSSA PDF Report
+      # -------------------------------------------------------------
+      # DOWNLOAD PDF REPORT
+      # -------------------------------------------------------------
+      - name: Download FOSSA PDF Report
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
+          RELEASE_ID: ${{ env.RELEASE_ID }}
         run: |
-          echo "Generating PDF report for release group: ${RELEASE_GROUP_NAME}"
-          fossa release-group report \
-            --release-group "$RELEASE_GROUP_NAME" \
-            --format pdf \
-            --output report.pdf
+          echo "Downloading PDF report for Release ID: $RELEASE_ID"
+
+          curl -L \
+            -H "Authorization: token $FOSSA_API_KEY" \
+            "$FOSSA_BASE/releases/$RELEASE_ID/report?format=pdf" \
+            -o report.pdf
+
+          echo "PDF report saved as report.pdf"
