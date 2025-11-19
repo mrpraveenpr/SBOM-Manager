@@ -45,16 +45,21 @@ jobs:
         run: |
           echo "Starting SBOM merge using CycloneDX CLI..."
 
+          # Debug file structure
+          echo "Workspace structure:"
+          ls -R .
+
           docker run --rm \
             -v "$(pwd)":/data \
             cyclonedx/cyclonedx-cli:latest \
             merge \
-              --input-files /data/sbom-source.json \
-              --input-files /data/sbom-docker.json \
-              --output-file /data/merged-sbom.json
+            --input-files /data/sboms/sbom-source.json \
+            --input-files /data/sboms/sbom-docker.json \
+            --output-file /data/sboms/merged-sbom.json
 
           echo "Merged SBOM created:"
-          cat merged-sbom.json
+          cat sboms/merged-sbom.json
+
 
       # ---------------------------------------------------------
       # 2. Commit and Push Merged SBOM
