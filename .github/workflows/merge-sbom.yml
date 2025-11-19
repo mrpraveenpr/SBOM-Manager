@@ -8,6 +8,12 @@ on:
     paths:
       - "sbom-source.json"
       - "sbom-docker.json"
+  pull_request:
+    branches:
+      - main
+      - develop
+      - "release-*"
+      - "feat/*"
   workflow_dispatch:
     inputs:
       branch:
