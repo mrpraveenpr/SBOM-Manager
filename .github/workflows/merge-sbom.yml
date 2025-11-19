@@ -7,7 +7,17 @@ on:
     paths:
       - "sbom-source.json"
       - "sbom-docker.json"
-
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to run SBOM processing on"
+        required: false
+        default: ""
+      force:
+        description: "Force run even if no SBOM files changed"
+        type: boolean
+        required: false
+        default: false
 jobs:
   merge-sbom:
     runs-on: ubuntu-latest
