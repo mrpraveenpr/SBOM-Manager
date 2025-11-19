@@ -14,7 +14,7 @@ jobs:
 
     env:
       PROJECT_LOCATOR_ENC: "sbom%2B58434/Origin%20Medical"
-      RELEASE_GROUP_LOCATOR_ENC: "sbom%2B58434/demo-group"
+      RELEASE_GROUP_NAME: "demo-group"
       PROJECT_NAME: "Origin Medical"
 
     steps:
@@ -60,21 +60,21 @@ jobs:
             --project "$PROJECT_NAME" \
             --revision "$BRANCH"
 
-      - name: Create New FOSSA Release (with encoded locators + debug)
+      - name: Create New FOSSA Release (with correct release-group usage)
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
           RELEASE_TITLE="${{ github.ref_name }}-$(date +'%Y%m%d-%H%M%S')"
 
           echo "Creating new FOSSA Release: $RELEASE_TITLE"
-          echo "Release Group Locator (encoded): $RELEASE_GROUP_LOCATOR_ENC"
+          echo "Release Group Name: $RELEASE_GROUP_NAME"
           echo "Project Locator (encoded): $PROJECT_LOCATOR_ENC"
 
           fossa release-group create-release \
             --debug \
-            --release-group "${RELEASE_GROUP_LOCATOR_ENC}" \
-            --title "${RELEASE_TITLE}" \
-            --project-locator "${PROJECT_LOCATOR_ENC}" \
+            --release "$RELEASE_GROUP_NAME" \
+            --title "$RELEASE_TITLE" \
+            --project-locator "$PROJECT_LOCATOR_ENC" \
             --project-revision "${{ github.ref_name }}" \
             --project-branch "master"
 
@@ -83,7 +83,7 @@ jobs:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
           BUILD_OUTPUT=$(fossa release-group build start \
-            --release-group "${RELEASE_GROUP_LOCATOR_ENC}" \
+            --release "$RELEASE_GROUP_NAME" \
             --json)
 
           echo "$BUILD_OUTPUT"
@@ -98,7 +98,7 @@ jobs:
           echo "Waiting for FOSSA build to finish..."
           while true; do
             STATUS=$(fossa release-group build status \
-              --release-group "${RELEASE_GROUP_LOCATOR_ENC}" \
+              --release "$RELEASE_GROUP_NAME" \
               --build-id "$BUILD_ID" \
               --json | jq -r '.status')
 
@@ -121,8 +121,8 @@ jobs:
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
-          echo "Generating PDF report for release group: ${RELEASE_GROUP_LOCATOR_ENC}"
+          echo "Generating PDF report for release group: ${RELEASE_GROUP_NAME}"
           fossa release-group report \
-            --release-group "${RELEASE_GROUP_LOCATOR_ENC}" \
+            --release "$RELEASE_GROUP_NAME" \
             --format pdf \
             --output report.pdf
