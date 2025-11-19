@@ -94,7 +94,8 @@ jobs:
             --release "$RELEASE_GROUP_NAME" \
             --title "$RELEASE_TITLE" \
             --project-locator "$PROJECT_LOCATOR" \
-            --project-revision "${{ github.ref_name }}"
+            --project-revision "${{ github.ref_name }}" \
+            --project-branch "master"
 
       # ---------------------------------------------------------
       # TRIGGER RELEASE GROUP BUILD
