@@ -12,22 +12,28 @@ jobs:
   merge-sbom:
     runs-on: ubuntu-latest
 
+    # ---------------------------------------------------------
+    # GLOBAL ENV VARIABLES (Non-sensitive)
+    # ---------------------------------------------------------
+    env:
+      PROJECT_NAME: "Origin Medical"                         # FOSSA Project Name
+      RELEASE_GROUP_NAME: ${{ secrets.FOSSA_RELEASE_GROUP_NAME }}
+      RELEASE_GROUP_ID: ${{ secrets.FOSSA_RELEASE_GROUP_ID }}
+
     steps:
       # ---------------------------------------------------------
       # Checkout Repository
       # ---------------------------------------------------------
-      - name: Checkout Repository (using PAT)
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.SBOM_MANAGER_TOKEN }}
 
       # ---------------------------------------------------------
-      # 1. Merge CycloneDX SBOM Files
+      # Merge SBOM Files
       # ---------------------------------------------------------
       - name: Merge SBOM Files (CycloneDX CLI via Docker)
         run: |
-          echo "Starting SBOM merge using CycloneDX CLI..."
-
           docker run --rm \
             -v "$(pwd)":/data \
             cyclonedx/cyclonedx-cli:latest \
@@ -36,29 +42,23 @@ jobs:
               --input-files /data/sbom-docker.json \
               --output-file /data/merged-sbom.json
 
-          echo "Merged SBOM created:"
-          cat merged-sbom.json
-
       # ---------------------------------------------------------
-      # 2. Commit and Push Merged SBOM
+      # Commit Merged SBOM
       # ---------------------------------------------------------
       - name: Commit and Push Merged SBOM
         run: |
           BRANCH="${{ github.ref_name }}"
-
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
-
           git add merged-sbom.json
           git commit -m "Add merged SBOM for branch $BRANCH [skip ci]" || true
 
-          echo "Pushing merged SBOM to branch $BRANCH"
           git push \
             "https://${{ secrets.SBOM_MANAGER_USERNAME }}:${{ secrets.SBOM_MANAGER_TOKEN }}@github.com/${{ secrets.SBOM_MANAGER_REPO }}.git" \
             "$BRANCH"
 
       # ---------------------------------------------------------
-      # 3. Install FOSSA CLI v3
+      # Install FOSSA CLI
       # ---------------------------------------------------------
       - name: Install FOSSA CLI v3
         run: |
@@ -67,18 +67,82 @@ jobs:
           echo "$HOME/.fossa/bin" >> "$GITHUB_PATH"
 
       # ---------------------------------------------------------
-      # 4. Upload merged SBOM to FOSSA (project: Origin Medical)
+      # Upload SBOM to FOSSA Project
       # ---------------------------------------------------------
       - name: Upload merged SBOM to FOSSA
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
           BRANCH="${{ github.ref_name }}"
-
-          echo "Uploading merged-sbom.json to FOSSA project 'Origin Medical', revision $BRANCH"
-
+          echo "Uploading merged SBOM to FOSSA project: $PROJECT_NAME"
           fossa sbom analyze merged-sbom.json \
-            --project "Origin Medical" \
+            --project "$PROJECT_NAME" \
             --revision "$BRANCH"
 
-          echo "FOSSA import complete"
+      # ---------------------------------------------------------
+      # ADD SBOM REVISION INTO RELEASE GROUP
+      # ---------------------------------------------------------
+      - name: Import SBOM to FOSSA Release Group
+        env:
+          FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
+        run: |
+          echo "Importing SBOM into Release Group: $RELEASE_GROUP_NAME (ID: $RELEASE_GROUP_ID)"
+          fossa release-group revisions add \
+            --id "$RELEASE_GROUP_ID" \
+            --revision "${{ github.ref_name }}" \
+            --project "$PROJECT_NAME"
+
+      # ---------------------------------------------------------
+      # TRIGGER FOSSA RELEASE GROUP BUILD
+      # ---------------------------------------------------------
+      - name: Trigger Release Group Scan
+        env:
+          FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
+        run: |
+          echo "Triggering FOSSA release group build for: $RELEASE_GROUP_NAME"
+          BUILD_OUTPUT=$(fossa release-group build start --id "$RELEASE_GROUP_ID" --json)
+          echo "$BUILD_OUTPUT"
+          BUILD_ID=$(echo "$BUILD_OUTPUT" | jq -r '.buildId')
+          echo "BUILD_ID=$BUILD_ID" >> $GITHUB_ENV
+
+      # ---------------------------------------------------------
+      # POLL UNTIL SCAN COMPLETES
+      # ---------------------------------------------------------
+      - name: Wait until Release Group Scan Completes
+        env:
+          FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
+          BUILD_ID: ${{ env.BUILD_ID }}
+        run: |
+          echo "Checking Release Group scan status..."
+          while true; do
+            STATUS=$(fossa release-group build status \
+              --id "$RELEASE_GROUP_ID" \
+              --build-id "$BUILD_ID" \
+              --json | jq -r '.status')
+
+            echo "Status: $STATUS"
+
+            if [ "$STATUS" = "COMPLETE" ]; then
+              echo "FOSSA scan complete!"
+              break
+            fi
+            if [ "$STATUS" = "FAILED" ]; then
+              echo "FOSSA scan failed!"
+              exit 1
+            fi
+
+            sleep 10
+          done
+
+      # ---------------------------------------------------------
+      # GENERATE FINAL SBOM PDF REPORT
+      # ---------------------------------------------------------
+      - name: Generate FOSSA Report
+        env:
+          FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
+        run: |
+          echo "Generating PDF report for Release Group: $RELEASE_GROUP_NAME"
+          fossa release-group report \
+            --name "$RELEASE_GROUP_NAME" \
+            --format pdf \
+            --output report.pdf
