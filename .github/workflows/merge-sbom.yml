@@ -82,3 +82,31 @@ jobs:
             --revision "$BRANCH"
 
           echo "FOSSA import complete"
+
+          # ---------------------------------------------------------
+          
+      # 5. Create or Update FOSSA Release in Release Group
+      # ---------------------------------------------------------
+      - name: Create FOSSA Release (Release Group)
+        id: create_release
+        env:
+          FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
+          RELEASE_GROUP_ID: ${{ secrets.FOSSA_RELEASE_GROUP_ID }}
+        run: |
+          REVISION="${{ github.ref_name }}"
+
+          echo "Creating release for revision $REVISION"
+
+          BODY="{\"revision\": \"$REVISION\"}"
+
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: Bearer $FOSSA_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$BODY" \
+            "https://app.fossa.com/api/project_group/$RELEASE_GROUP_ID/release")
+
+          echo "$RESPONSE"
+          
+          RELEASE_ID=$(echo "$RESPONSE" | jq -r '.id')
+          echo "release_id=$RELEASE_ID" >> $GITHUB_OUTPUT
+
