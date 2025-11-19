@@ -14,7 +14,7 @@ jobs:
 
     env:
       PROJECT_LOCATOR: "sbom+58434/Origin Medical"
-      RELEASE_GROUP_LOCATOR: "group/5121"
+      RELEASE_GROUP_LOCATOR: "sbom+58434/demo-group"
       PROJECT_NAME: "Origin Medical"
 
     steps:
@@ -47,6 +47,7 @@ jobs:
           BRANCH="${{ github.ref_name }}"
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
+
           git add merged-sbom.json
           git commit -m "Add merged SBOM for branch $BRANCH [skip ci]" || true
 
@@ -98,7 +99,7 @@ jobs:
             --project-branch "master"
 
       # ---------------------------------------------------------
-      # TRIGGER FOSSA RELEASE GROUP BUILD
+      # TRIGGER RELEASE GROUP BUILD
       # ---------------------------------------------------------
       - name: Trigger Release Group Build
         env:
