@@ -13,7 +13,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      PROJECT_LOCATOR_ENC: "sbom%2B58434/Origin%20Medical"
+      PROJECT_LOCATOR_ENC: "sbom%2B58434%2FOrigin%20Medical"   # CORRECT
+      PROJECT_LOCATOR_DEC: "sbom+58434/Origin Medical"         # CORRECT
       PROJECT_NAME: "Origin Medical"
       FOSSA_BASE: "https://app.fossa.com/api"
 
@@ -58,11 +59,11 @@ jobs:
           echo "Uploading SBOM to FOSSA project: $PROJECT_NAME"
 
           fossa sbom analyze merged-sbom.json \
-            --project "$PROJECT_NAME" \
+            --project "$PROJECT_LOCATOR_DEC" \
             --revision "$BRANCH"
 
       # -------------------------------------------------------------
-      #  CREATE PROJECT RELEASE (SUPPORTED)
+      # CREATE PROJECT RELEASE (SUPPORTED)
       # -------------------------------------------------------------
       - name: Create FOSSA Project Release
         env:
@@ -95,7 +96,7 @@ jobs:
           echo "Created Project Release ID: $RELEASE_ID"
 
       # -------------------------------------------------------------
-      #  START BUILD FOR PROJECT RELEASE
+      # START BUILD
       # -------------------------------------------------------------
       - name: Start FOSSA Build
         env:
@@ -104,64 +105,4 @@ jobs:
         run: |
           echo "Starting build for release $RELEASE_ID"
 
-          RESPONSE=$(curl -s -X POST "$FOSSA_BASE/releases/$RELEASE_ID/builds" \
-            -H "Authorization: token $FOSSA_API_KEY" \
-            -H "Content-Type: application/json")
-
-          echo "Build Start Response: $RESPONSE"
-
-          BUILD_ID=$(echo "$RESPONSE" | jq -r '.id')
-
-          if [ "$BUILD_ID" = "null" ] || [ -z "$BUILD_ID" ]; then
-            echo "Failed to start build!"
-            exit 1
-          fi
-
-          echo "BUILD_ID=$BUILD_ID" >> $GITHUB_ENV
-          echo "Build ID: $BUILD_ID"
-
-      # -------------------------------------------------------------
-      #  WAIT FOR BUILD COMPLETION
-      # -------------------------------------------------------------
-      - name: Wait for FOSSA Build to Complete
-        env:
-          FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
-          BUILD_ID: ${{ env.BUILD_ID }}
-        run: |
-          echo "Waiting for build $BUILD_ID to finish..."
-
-          while true; do
-            STATUS=$(curl -s "$FOSSA_BASE/builds/$BUILD_ID" \
-              -H "Authorization: token $FOSSA_API_KEY" | jq -r '.status')
-
-            echo "Build Status: $STATUS"
-
-            if [ "$STATUS" = "COMPLETE" ]; then
-              echo "Build completed!"
-              break
-            fi
-
-            if [ "$STATUS" = "FAILED" ]; then
-              echo "Build failed!"
-              exit 1
-            fi
-
-            sleep 10
-          done
-
-      # -------------------------------------------------------------
-      #  DOWNLOAD PROJECT PDF REPORT
-      # -------------------------------------------------------------
-      - name: Download FOSSA Project PDF Report
-        env:
-          FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
-          RELEASE_ID: ${{ env.RELEASE_ID }}
-        run: |
-          echo "Downloading PDF report for release $RELEASE_ID"
-
-          curl -L \
-            -H "Authorization: token $FOSSA_API_KEY" \
-            "$FOSSA_BASE/releases/$RELEASE_ID/report?format=pdf" \
-            -o report.pdf
-
-          echo "PDF saved as report.pdf"
+          RESPONSE=$(curl -s -X POST "$FOSSA_BASE/releases/$RELEASE_
