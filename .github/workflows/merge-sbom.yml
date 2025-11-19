@@ -80,17 +80,17 @@ jobs:
             --revision "$BRANCH"
 
       # ---------------------------------------------------------
-      # ADD SBOM REVISION INTO RELEASE GROUP
+      # ADD SBOM REVISION INTO RELEASE GROUP  (FIXED)
       # ---------------------------------------------------------
       - name: Import SBOM to FOSSA Release Group
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
           echo "Importing SBOM into Release Group: $RELEASE_GROUP_NAME (ID: $RELEASE_GROUP_ID)"
-          fossa release-group revisions add \
+          fossa release-group create-release \
             --id "$RELEASE_GROUP_ID" \
-            --revision "${{ github.ref_name }}" \
-            --project "$PROJECT_NAME"
+            --project "$PROJECT_NAME" \
+            --revision "${{ github.ref_name }}"
 
       # ---------------------------------------------------------
       # TRIGGER FOSSA RELEASE GROUP BUILD
