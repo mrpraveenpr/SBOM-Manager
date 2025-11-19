@@ -14,8 +14,6 @@ jobs:
 
     env:
       PROJECT_LOCATOR_ENC: "sbom%2B58434/Origin%20Medical"
-      RELEASE_GROUP_ID: "5191"
-      ORG_ID: "58434"   # <-- UPDATE this if needed
       PROJECT_NAME: "Origin Medical"
       FOSSA_BASE: "https://app.fossa.com/api"
 
@@ -52,7 +50,7 @@ jobs:
             https://raw.githubusercontent.com/fossas/fossa-cli/master/install-latest.sh | bash
           echo "$HOME/.fossa/bin" >> "$GITHUB_PATH"
 
-      - name: Upload merged SBOM to FOSSA Project
+      - name: Upload merged SBOM to FOSSA
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
@@ -64,23 +62,22 @@ jobs:
             --revision "$BRANCH"
 
       # -------------------------------------------------------------
-      #  CREATE RELEASE-GROUP RELEASE USING FOSSA REST API
+      #  CREATE PROJECT RELEASE (SUPPORTED)
       # -------------------------------------------------------------
-      - name: Create Release in FOSSA Release Group (REST API)
+      - name: Create FOSSA Project Release
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
           BRANCH="${{ github.ref_name }}"
           RELEASE_TITLE="${BRANCH}-$(date +%Y%m%d-%H%M%S)"
 
-          echo "Creating FOSSA Release: $RELEASE_TITLE in group $RELEASE_GROUP_ID"
+          echo "Creating Project Release: $RELEASE_TITLE"
 
-          RESPONSE=$(curl -s -X POST "$FOSSA_BASE/release-groups/$RELEASE_GROUP_ID/releases" \
+          RESPONSE=$(curl -s -X POST "$FOSSA_BASE/projects/$PROJECT_LOCATOR_ENC/releases" \
             -H "Authorization: token $FOSSA_API_KEY" \
             -H "Content-Type: application/json" \
             -d "{
                   \"title\": \"$RELEASE_TITLE\",
-                  \"projectLocator\": \"$PROJECT_LOCATOR_ENC\",
                   \"revision\": \"$BRANCH\",
                   \"branch\": \"master\"
                 }")
@@ -95,17 +92,17 @@ jobs:
           fi
 
           echo "RELEASE_ID=$RELEASE_ID" >> $GITHUB_ENV
-          echo "Created Release ID: $RELEASE_ID"
+          echo "Created Project Release ID: $RELEASE_ID"
 
       # -------------------------------------------------------------
-      #  START BUILD FOR THE RELEASE
+      #  START BUILD FOR PROJECT RELEASE
       # -------------------------------------------------------------
-      - name: Start FOSSA Release Build (REST API)
+      - name: Start FOSSA Build
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
           RELEASE_ID: ${{ env.RELEASE_ID }}
         run: |
-          echo "Starting FOSSA build for Release ID: $RELEASE_ID"
+          echo "Starting build for release $RELEASE_ID"
 
           RESPONSE=$(curl -s -X POST "$FOSSA_BASE/releases/$RELEASE_ID/builds" \
             -H "Authorization: token $FOSSA_API_KEY" \
@@ -124,15 +121,14 @@ jobs:
           echo "Build ID: $BUILD_ID"
 
       # -------------------------------------------------------------
-      # WAIT FOR BUILD COMPLETION
+      #  WAIT FOR BUILD COMPLETION
       # -------------------------------------------------------------
-      - name: Wait for FOSSA Build Completion
+      - name: Wait for FOSSA Build to Complete
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
-          RELEASE_ID: ${{ env.RELEASE_ID }}
           BUILD_ID: ${{ env.BUILD_ID }}
         run: |
-          echo "Waiting for FOSSA build $BUILD_ID to finish..."
+          echo "Waiting for build $BUILD_ID to finish..."
 
           while true; do
             STATUS=$(curl -s "$FOSSA_BASE/builds/$BUILD_ID" \
@@ -141,7 +137,7 @@ jobs:
             echo "Build Status: $STATUS"
 
             if [ "$STATUS" = "COMPLETE" ]; then
-              echo "Build completed successfully!"
+              echo "Build completed!"
               break
             fi
 
@@ -154,18 +150,18 @@ jobs:
           done
 
       # -------------------------------------------------------------
-      # DOWNLOAD PDF REPORT
+      #  DOWNLOAD PROJECT PDF REPORT
       # -------------------------------------------------------------
-      - name: Download FOSSA PDF Report
+      - name: Download FOSSA Project PDF Report
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
           RELEASE_ID: ${{ env.RELEASE_ID }}
         run: |
-          echo "Downloading PDF report for Release ID: $RELEASE_ID"
+          echo "Downloading PDF report for release $RELEASE_ID"
 
           curl -L \
             -H "Authorization: token $FOSSA_API_KEY" \
             "$FOSSA_BASE/releases/$RELEASE_ID/report?format=pdf" \
             -o report.pdf
 
-          echo "PDF report saved as report.pdf"
+          echo "PDF saved as report.pdf"
