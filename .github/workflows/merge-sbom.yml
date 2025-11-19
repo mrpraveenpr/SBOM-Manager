@@ -13,22 +13,17 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      PROJECT_LOCATOR: "sbom+58434/Origin Medical"
-      RELEASE_GROUP_LOCATOR: "sbom+58434/demo-group"
+      # Use URL-encoded locators (plus -> %2B, space -> %20)
+      PROJECT_LOCATOR_ENC: "sbom%2B58434/Origin%20Medical"
+      RELEASE_GROUP_LOCATOR_ENC: "sbom%2B58434/demo-group"
       PROJECT_NAME: "Origin Medical"
 
     steps:
-      # ---------------------------------------------------------
-      # Checkout Repository
-      # ---------------------------------------------------------
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.SBOM_MANAGER_TOKEN }}
 
-      # ---------------------------------------------------------
-      # Merge SBOM Files
-      # ---------------------------------------------------------
       - name: Merge SBOM Files (CycloneDX CLI via Docker)
         run: |
           docker run --rm \
@@ -39,94 +34,74 @@ jobs:
               --input-files /data/sbom-docker.json \
               --output-file /data/merged-sbom.json
 
-      # ---------------------------------------------------------
-      # Commit Merged SBOM
-      # ---------------------------------------------------------
       - name: Commit and Push Merged SBOM
         run: |
           BRANCH="${{ github.ref_name }}"
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
-
           git add merged-sbom.json
           git commit -m "Add merged SBOM for branch $BRANCH [skip ci]" || true
-
           git push \
             "https://${{ secrets.SBOM_MANAGER_USERNAME }}:${{ secrets.SBOM_MANAGER_TOKEN }}@github.com/${{ secrets.SBOM_MANAGER_REPO }}.git" \
             "$BRANCH"
 
-      # ---------------------------------------------------------
-      # Install FOSSA CLI
-      # ---------------------------------------------------------
       - name: Install FOSSA CLI v3
         run: |
           curl -H "Cache-Control: no-cache" \
             https://raw.githubusercontent.com/fossas/fossa-cli/master/install-latest.sh | bash
           echo "$HOME/.fossa/bin" >> "$GITHUB_PATH"
 
-      # ---------------------------------------------------------
-      # Upload SBOM to FOSSA Project
-      # ---------------------------------------------------------
       - name: Upload merged SBOM to FOSSA
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
           BRANCH="${{ github.ref_name }}"
           echo "Uploading SBOM to FOSSA project: $PROJECT_NAME"
-
           fossa sbom analyze merged-sbom.json \
             --project "$PROJECT_NAME" \
             --revision "$BRANCH"
 
-      # ---------------------------------------------------------
-      # CREATE NEW RELEASE (EVERY RUN)
-      # ---------------------------------------------------------
-      - name: Create New FOSSA Release
+      - name: Create New FOSSA Release (with encoded locators + debug)
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
           RELEASE_TITLE="${{ github.ref_name }}-$(date +'%Y%m%d-%H%M%S')"
 
           echo "Creating new FOSSA Release: $RELEASE_TITLE"
-          echo "Release Group Locator: $RELEASE_GROUP_LOCATOR"
-          echo "Project Locator: $PROJECT_LOCATOR"
+          echo "Release Group Locator (encoded): $RELEASE_GROUP_LOCATOR_ENC"
+          echo "Project Locator (encoded): $PROJECT_LOCATOR_ENC"
 
+          # Use encoded locators. Add --debug to get detailed CLI output if it fails.
           fossa release-group create-release \
-            --release "$RELEASE_GROUP_LOCATOR" \
-            --title "$RELEASE_TITLE" \
-            --project-locator "$PROJECT_LOCATOR" \
+            --debug \
+            --release "${RELEASE_GROUP_LOCATOR_ENC}" \
+            --title "${RELEASE_TITLE}" \
+            --project-locator "${PROJECT_LOCATOR_ENC}" \
             --project-revision "${{ github.ref_name }}" \
             --project-branch "master"
 
-      # ---------------------------------------------------------
-      # TRIGGER RELEASE GROUP BUILD
-      # ---------------------------------------------------------
       - name: Trigger Release Group Build
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
+          # Start build using encoded release locator
           BUILD_OUTPUT=$(fossa release-group build start \
-            --release "$RELEASE_GROUP_LOCATOR" \
+            --release "${RELEASE_GROUP_LOCATOR_ENC}" \
             --json)
 
           echo "$BUILD_OUTPUT"
           BUILD_ID=$(echo "$BUILD_OUTPUT" | jq -r '.buildId')
-
           echo "BUILD_ID=$BUILD_ID" >> $GITHUB_ENV
 
-      # ---------------------------------------------------------
-      # POLL UNTIL BUILD COMPLETES
-      # ---------------------------------------------------------
       - name: Wait for Build Completion
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
           BUILD_ID: ${{ env.BUILD_ID }}
         run: |
           echo "Waiting for FOSSA build to finish..."
-
           while true; do
             STATUS=$(fossa release-group build status \
-              --release "$RELEASE_GROUP_LOCATOR" \
+              --release "${RELEASE_GROUP_LOCATOR_ENC}" \
               --build-id "$BUILD_ID" \
               --json | jq -r '.status')
 
@@ -145,16 +120,12 @@ jobs:
             sleep 10
           done
 
-      # ---------------------------------------------------------
-      # GENERATE PDF REPORT
-      # ---------------------------------------------------------
       - name: Generate FOSSA PDF Report
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
-          echo "Generating PDF report for release group: $RELEASE_GROUP_LOCATOR"
-
+          echo "Generating PDF report for release group: ${RELEASE_GROUP_LOCATOR_ENC}"
           fossa release-group report \
-            --name "$RELEASE_GROUP_LOCATOR" \
+            --name "${RELEASE_GROUP_LOCATOR_ENC}" \
             --format pdf \
             --output report.pdf
