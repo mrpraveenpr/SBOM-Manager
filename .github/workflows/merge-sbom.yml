@@ -12,13 +12,10 @@ jobs:
   merge-sbom:
     runs-on: ubuntu-latest
 
-    # ---------------------------------------------------------
-    # GLOBAL ENV VARIABLES (Non-sensitive)
-    # ---------------------------------------------------------
     env:
-      PROJECT_NAME: "Origin Medical"                         # FOSSA Project Name
-      RELEASE_GROUP_NAME: ${{ secrets.FOSSA_RELEASE_GROUP_NAME }}
-      RELEASE_GROUP_ID: ${{ secrets.FOSSA_RELEASE_GROUP_ID }}
+      PROJECT_LOCATOR: "sbom+58434/Origin Medical"
+      RELEASE_GROUP_NAME: "demo-group"
+      PROJECT_NAME: "Origin Medical"
 
     steps:
       # ---------------------------------------------------------
@@ -74,60 +71,72 @@ jobs:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
           BRANCH="${{ github.ref_name }}"
-          echo "Uploading merged SBOM to FOSSA project: $PROJECT_NAME"
+          echo "Uploading SBOM to FOSSA project: $PROJECT_NAME"
+
           fossa sbom analyze merged-sbom.json \
             --project "$PROJECT_NAME" \
             --revision "$BRANCH"
 
       # ---------------------------------------------------------
-      # ADD SBOM REVISION INTO RELEASE GROUP  (FIXED)
+      # CREATE A NEW RELEASE IN RELEASE GROUP (EVERY RUN)
       # ---------------------------------------------------------
-      - name: Import SBOM to FOSSA Release Group
+      - name: Create New Release in FOSSA Release Group
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
-          echo "Importing SBOM into Release Group: $RELEASE_GROUP_NAME (ID: $RELEASE_GROUP_ID)"
+          RELEASE_TITLE="${{ github.ref_name }}-$(date +'%Y%m%d-%H%M%S')"
+
+          echo "Creating new FOSSA Release: $RELEASE_TITLE"
+          echo "Release Group: $RELEASE_GROUP_NAME"
+          echo "Project Locator: $PROJECT_LOCATOR"
+
           fossa release-group create-release \
-            --id "$RELEASE_GROUP_ID" \
-            --project "$PROJECT_NAME" \
-            --revision "${{ github.ref_name }}"
+            --release "$RELEASE_GROUP_NAME" \
+            --title "$RELEASE_TITLE" \
+            --project-locator "$PROJECT_LOCATOR" \
+            --project-revision "${{ github.ref_name }}"
 
       # ---------------------------------------------------------
-      # TRIGGER FOSSA RELEASE GROUP BUILD
+      # TRIGGER RELEASE GROUP BUILD
       # ---------------------------------------------------------
-      - name: Trigger Release Group Scan
+      - name: Trigger Release Group Build
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
-          echo "Triggering FOSSA release group build for: $RELEASE_GROUP_NAME"
-          BUILD_OUTPUT=$(fossa release-group build start --id "$RELEASE_GROUP_ID" --json)
+          BUILD_OUTPUT=$(fossa release-group build start \
+            --release "$RELEASE_GROUP_NAME" \
+            --json)
+
           echo "$BUILD_OUTPUT"
           BUILD_ID=$(echo "$BUILD_OUTPUT" | jq -r '.buildId')
+
           echo "BUILD_ID=$BUILD_ID" >> $GITHUB_ENV
 
       # ---------------------------------------------------------
-      # POLL UNTIL SCAN COMPLETES
+      # POLL UNTIL BUILD COMPLETES
       # ---------------------------------------------------------
-      - name: Wait until Release Group Scan Completes
+      - name: Wait for Build
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
           BUILD_ID: ${{ env.BUILD_ID }}
         run: |
-          echo "Checking Release Group scan status..."
+          echo "Waiting for FOSSA build to finish..."
+
           while true; do
             STATUS=$(fossa release-group build status \
-              --id "$RELEASE_GROUP_ID" \
+              --release "$RELEASE_GROUP_NAME" \
               --build-id "$BUILD_ID" \
               --json | jq -r '.status')
 
-            echo "Status: $STATUS"
+            echo "Build status: $STATUS"
 
             if [ "$STATUS" = "COMPLETE" ]; then
-              echo "FOSSA scan complete!"
+              echo "Build completed!"
               break
             fi
+
             if [ "$STATUS" = "FAILED" ]; then
-              echo "FOSSA scan failed!"
+              echo "Build failed!"
               exit 1
             fi
 
@@ -135,13 +144,14 @@ jobs:
           done
 
       # ---------------------------------------------------------
-      # GENERATE FINAL SBOM PDF REPORT
+      # GENERATE PDF REPORT
       # ---------------------------------------------------------
       - name: Generate FOSSA Report
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
-          echo "Generating PDF report for Release Group: $RELEASE_GROUP_NAME"
+          echo "Generating PDF report for release group: $RELEASE_GROUP_NAME"
+
           fossa release-group report \
             --name "$RELEASE_GROUP_NAME" \
             --format pdf \
