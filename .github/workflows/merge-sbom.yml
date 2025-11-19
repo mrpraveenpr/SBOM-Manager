@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "release-*"
+      - "feat/*"
     paths:
       - "sbom-source.json"
       - "sbom-docker.json"
