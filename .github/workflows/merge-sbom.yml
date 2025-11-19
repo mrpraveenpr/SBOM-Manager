@@ -60,11 +60,70 @@ jobs:
             --project "$PROJECT_NAME" \
             --revision "$BRANCH"
 
-      - name: Create New FOSSA Release (corrected flags)
+      - name: Create New FOSSA Release (fixed quoting)
         env:
           FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
         run: |
-          RELEASE_TITLE="${{ github.ref_name }}-$(date +'%Y%m%d-%H%M%S')"
+          BRANCH="${{ github.ref_name }}"
+          RELEASE_TITLE="${BRANCH}-$(date +%Y%m%d-%H%M%S)"
 
           echo "Creating new FOSSA Release: $RELEASE_TITLE"
-          echo "Release Group
+          echo "Release Group Name: $RELEASE_GROUP_NAME"
+          echo "Project Locator (encoded): $PROJECT_LOCATOR_ENC"
+
+          fossa release-group create-release \
+            --debug \
+            --release-group "$RELEASE_GROUP_NAME" \
+            --title "$RELEASE_TITLE" \
+            --project-locator "$PROJECT_LOCATOR_ENC" \
+            --project-revision "$BRANCH" \
+            --project-branch "master"
+
+      - name: Trigger Release Group Build
+        env:
+          FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
+        run: |
+          BUILD_OUTPUT=$(fossa release-group build start \
+            --release-group "$RELEASE_GROUP_NAME" \
+            --json)
+
+          echo "$BUILD_OUTPUT"
+          BUILD_ID=$(echo "$BUILD_OUTPUT" | jq -r '.buildId')
+          echo "BUILD_ID=$BUILD_ID" >> $GITHUB_ENV
+
+      - name: Wait for Build Completion
+        env:
+          FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
+          BUILD_ID: ${{ env.BUILD_ID }}
+        run: |
+          echo "Waiting for FOSSA build to finish..."
+          while true; do
+            STATUS=$(fossa release-group build status \
+              --release-group "$RELEASE_GROUP_NAME" \
+              --build-id "$BUILD_ID" \
+              --json | jq -r '.status')
+
+            echo "Build status: $STATUS"
+
+            if [ "$STATUS" = "COMPLETE" ]; then
+              echo "Build completed!"
+              break
+            fi
+
+            if [ "$STATUS" = "FAILED" ]; then
+              echo "Build failed!"
+              exit 1
+            fi
+
+            sleep 10
+          done
+
+      - name: Generate FOSSA PDF Report
+        env:
+          FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
+        run: |
+          echo "Generating PDF report for release group: ${RELEASE_GROUP_NAME}"
+          fossa release-group report \
+            --release-group "$RELEASE_GROUP_NAME" \
+            --format pdf \
+            --output report.pdf
